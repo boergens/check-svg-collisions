@@ -87,21 +87,156 @@ def parse_points(points_str: str) -> list:
     return points
 
 
-def parse_path_bbox(d: str) -> tuple:
-    """Parse SVG path d attribute and return bounding box."""
-    # Simple parser - extract all numeric coordinates
-    numbers = re.findall(r'[-+]?[0-9]*\.?[0-9]+', d)
-    if len(numbers) < 2:
-        return None
+def parse_path_to_lines(d: str) -> list:
+    """Parse SVG path d attribute and return list of (x1, y1, x2, y2) line segments."""
+    lines = []
 
-    coords = [float(n) for n in numbers]
-    xs = coords[0::2]
-    ys = coords[1::2]
+    # Tokenize: split into commands and numbers
+    tokens = re.findall(r'[MmLlHhVvZzCcSsQqTtAa]|[-+]?[0-9]*\.?[0-9]+', d)
 
-    if not xs or not ys:
-        return None
+    i = 0
+    current_x, current_y = 0.0, 0.0
+    start_x, start_y = 0.0, 0.0  # For Z command
 
-    return min(xs), min(ys), max(xs), max(ys)
+    while i < len(tokens):
+        cmd = tokens[i]
+        i += 1
+
+        if cmd in 'Mm':
+            # MoveTo
+            if i + 1 < len(tokens):
+                x, y = float(tokens[i]), float(tokens[i + 1])
+                i += 2
+                if cmd == 'm':  # relative
+                    current_x += x
+                    current_y += y
+                else:
+                    current_x, current_y = x, y
+                start_x, start_y = current_x, current_y
+
+        elif cmd in 'Ll':
+            # LineTo
+            if i + 1 < len(tokens):
+                x, y = float(tokens[i]), float(tokens[i + 1])
+                i += 2
+                prev_x, prev_y = current_x, current_y
+                if cmd == 'l':  # relative
+                    current_x += x
+                    current_y += y
+                else:
+                    current_x, current_y = x, y
+                lines.append((prev_x, prev_y, current_x, current_y))
+
+        elif cmd in 'Hh':
+            # Horizontal LineTo
+            if i < len(tokens):
+                x = float(tokens[i])
+                i += 1
+                prev_x = current_x
+                if cmd == 'h':  # relative
+                    current_x += x
+                else:
+                    current_x = x
+                lines.append((prev_x, current_y, current_x, current_y))
+
+        elif cmd in 'Vv':
+            # Vertical LineTo
+            if i < len(tokens):
+                y = float(tokens[i])
+                i += 1
+                prev_y = current_y
+                if cmd == 'v':  # relative
+                    current_y += y
+                else:
+                    current_y = y
+                lines.append((current_x, prev_y, current_x, current_y))
+
+        elif cmd in 'Zz':
+            # ClosePath - line back to start
+            if current_x != start_x or current_y != start_y:
+                lines.append((current_x, current_y, start_x, start_y))
+            current_x, current_y = start_x, start_y
+
+        elif cmd in 'Cc':
+            # Cubic Bezier - approximate with line from current to endpoint
+            if i + 5 < len(tokens):
+                # Skip control points, just get endpoint
+                if cmd == 'c':
+                    end_x = current_x + float(tokens[i + 4])
+                    end_y = current_y + float(tokens[i + 5])
+                else:
+                    end_x = float(tokens[i + 4])
+                    end_y = float(tokens[i + 5])
+                i += 6
+                lines.append((current_x, current_y, end_x, end_y))
+                current_x, current_y = end_x, end_y
+
+        elif cmd in 'Ss':
+            # Smooth cubic Bezier
+            if i + 3 < len(tokens):
+                if cmd == 's':
+                    end_x = current_x + float(tokens[i + 2])
+                    end_y = current_y + float(tokens[i + 3])
+                else:
+                    end_x = float(tokens[i + 2])
+                    end_y = float(tokens[i + 3])
+                i += 4
+                lines.append((current_x, current_y, end_x, end_y))
+                current_x, current_y = end_x, end_y
+
+        elif cmd in 'Qq':
+            # Quadratic Bezier
+            if i + 3 < len(tokens):
+                if cmd == 'q':
+                    end_x = current_x + float(tokens[i + 2])
+                    end_y = current_y + float(tokens[i + 3])
+                else:
+                    end_x = float(tokens[i + 2])
+                    end_y = float(tokens[i + 3])
+                i += 4
+                lines.append((current_x, current_y, end_x, end_y))
+                current_x, current_y = end_x, end_y
+
+        elif cmd in 'Tt':
+            # Smooth quadratic Bezier
+            if i + 1 < len(tokens):
+                if cmd == 't':
+                    end_x = current_x + float(tokens[i])
+                    end_y = current_y + float(tokens[i + 1])
+                else:
+                    end_x = float(tokens[i])
+                    end_y = float(tokens[i + 1])
+                i += 2
+                lines.append((current_x, current_y, end_x, end_y))
+                current_x, current_y = end_x, end_y
+
+        elif cmd in 'Aa':
+            # Arc - approximate with line to endpoint
+            if i + 6 < len(tokens):
+                if cmd == 'a':
+                    end_x = current_x + float(tokens[i + 5])
+                    end_y = current_y + float(tokens[i + 6])
+                else:
+                    end_x = float(tokens[i + 5])
+                    end_y = float(tokens[i + 6])
+                i += 7
+                lines.append((current_x, current_y, end_x, end_y))
+                current_x, current_y = end_x, end_y
+        else:
+            # Unknown command or number without command (implicit LineTo after M)
+            # Try to parse as implicit lineto
+            try:
+                x = float(cmd)
+                if i < len(tokens):
+                    y = float(tokens[i])
+                    i += 1
+                    prev_x, prev_y = current_x, current_y
+                    current_x, current_y = x, y
+                    lines.append((prev_x, prev_y, current_x, current_y))
+            except ValueError:
+                pass
+
+    return lines
 
 
 def extract_elements(svg_path: str) -> tuple:
@@ -186,53 +321,37 @@ def extract_elements(svg_path: str) -> tuple:
         elif tag == 'path':
             d = elem.get('d', '')
             if d:
-                result = parse_path_bbox(d)
-                if result:
-                    x_min, y_min, x_max, y_max = result
-                    # Treat paths as lines for collision purposes
-                    line = Line(x_min, y_min, x_max, y_max, name)
+                path_segments = parse_path_to_lines(d)
+                for idx, (x1, y1, x2, y2) in enumerate(path_segments):
+                    segment_name = f"{name}_seg{idx}" if len(path_segments) > 1 else name
+                    line = Line(x1, y1, x2, y2, segment_name)
                     lines.append(line)
 
     return texts, rects, lines, polygons
 
 
-def is_small_label(text: BBox) -> bool:
-    """Check if text is a small label (likely an arrow label like 'yes', 'no', 'mesh')."""
-    return text.width < 60 and text.height < 20
-
-
-def check_collisions(texts, rects, lines, polygons, check_line_text=False) -> list:
+def check_collisions(texts, rects, lines, polygons) -> list:
     """Check all collision rules."""
     issues = []
 
     # Combine rects and polygons as "boxes"
     boxes = rects + polygons
 
-    # Rule 1: Text ↔ Text - no overlap (skip small labels)
+    # Rule 1: Text ↔ Text - no overlap
     for i, t1 in enumerate(texts):
         for t2 in texts[i + 1:]:
             if t1.overlaps(t2):
-                # Skip if both are small labels (often intentional)
-                if is_small_label(t1) and is_small_label(t2):
-                    continue
                 issues.append(("text overlap", t1.name, t2.name))
 
     # Rule 2: Text ↔ Line - line must not pass through text
-    # Only check if explicitly enabled (often produces false positives from arrow labels)
-    if check_line_text:
-        for line in lines:
-            for text in texts:
-                # Skip small labels (they're intentional arrow annotations)
-                if is_small_label(text):
-                    continue
-                if line.intersects_box(text):
-                    issues.append(("line through text", line.name, text.name))
+    for line in lines:
+        for text in texts:
+            if line.intersects_box(text):
+                issues.append(("line through text", line.name, text.name))
 
     # Rule 3: Text ↔ Box - text should not CROSS box borders
     # (text fully inside or fully outside is OK)
     for text in texts:
-        if is_small_label(text):
-            continue
         for box in boxes:
             if text.overlaps(box):
                 # OK if box contains text (text is inside)
