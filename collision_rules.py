@@ -112,11 +112,28 @@ def check_collisions(texts, rects, lines, polygons, rendered_markers=None, marke
                 warnings.append(("line touches corner", line.name, box.name))
 
     # Rule 6: Line - Marker: lines must not pass through rendered markers
-    for owner_name, marker_box in rendered_markers:
+    # Exception: lines starting/ending at marker tip going perpendicular are OK
+    for owner_name, marker_box, tip_x, tip_y, dir_x, dir_y in rendered_markers:
         for line in lines:
             if line.name == owner_name or line.name.startswith(owner_name + "_seg"):
                 continue
             if line.passes_through_box(marker_box):
+                # Check if line starts or ends at the marker tip
+                eps = 2.0  # tolerance for "at the tip"
+                starts_at_tip = abs(line.x1 - tip_x) < eps and abs(line.y1 - tip_y) < eps
+                ends_at_tip = abs(line.x2 - tip_x) < eps and abs(line.y2 - tip_y) < eps
+
+                if starts_at_tip or ends_at_tip:
+                    # Check if line goes perpendicular (or away from) the marker
+                    line_dx, line_dy = line.direction()
+                    # If line starts at tip, it goes in its direction; if ends at tip, opposite
+                    if ends_at_tip:
+                        line_dx, line_dy = -line_dx, -line_dy
+                    # Dot product: 0 = perpendicular, negative = going away from marker
+                    dot = line_dx * dir_x + line_dy * dir_y
+                    if dot <= 0.1:  # perpendicular or going away (small tolerance for rounding)
+                        continue  # This is OK, not a collision
+
                 issues.append(("line through marker", line.name, marker_box.name))
             elif line.touches_box_corner(marker_box):
                 warnings.append(("line touches marker corner", line.name, marker_box.name))

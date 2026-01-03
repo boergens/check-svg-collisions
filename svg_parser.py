@@ -160,6 +160,11 @@ def compute_marker_bbox(line, marker):
 
     Note: Default markerUnits is 'strokeWidth', meaning marker dimensions are
     scaled by the line's stroke-width.
+
+    Returns: (bbox, tip_x, tip_y, dir_x, dir_y) where:
+        - bbox: the marker's bounding box
+        - tip_x, tip_y: the marker's tip position (line endpoint)
+        - dir_x, dir_y: the marker's direction (unit vector pointing into the marker)
     """
     dx = line.x2 - line.x1
     dy = line.y2 - line.y1
@@ -176,11 +181,11 @@ def compute_marker_bbox(line, marker):
         # Degenerate line - just center the marker
         half_w = width / 2
         half_h = height / 2
-        return BBox(
+        return (BBox(
             line.x2 - half_w, line.y2 - half_h,
             line.x2 + half_w, line.y2 + half_h,
             f"{line.name}:marker", 'marker'
-        )
+        ), line.x2, line.y2, 0, 0)
 
     # Unit direction vector (line points this way)
     ux, uy = dx / length, dy / length
@@ -215,10 +220,10 @@ def compute_marker_bbox(line, marker):
     xs = [c[0] for c in global_corners]
     ys = [c[1] for c in global_corners]
 
-    return BBox(
+    return (BBox(
         min(xs), min(ys), max(xs), max(ys),
         f"{line.name}:marker", 'marker'
-    )
+    ), line.x2, line.y2, ux, uy)
 
 
 def find_element_line_numbers(svg_path: str) -> dict:
@@ -374,7 +379,7 @@ def extract_elements(svg_path: str, warn_missing_ids: bool = True) -> tuple:
     for line in lines:
         if line.marker_end_id and line.marker_end_id in markers:
             marker = markers[line.marker_end_id]
-            bbox = compute_marker_bbox(line, marker)
-            rendered_markers.append((line.name, bbox))
+            bbox, tip_x, tip_y, dir_x, dir_y = compute_marker_bbox(line, marker)
+            rendered_markers.append((line.name, bbox, tip_x, tip_y, dir_x, dir_y))
 
     return texts, rects, lines, polygons, rendered_markers, markers, missing_id_warnings

@@ -369,6 +369,22 @@ def main():
     else:
         failed += 1
 
+    # Should NOT trigger: line starting at marker tip going perpendicular
+    # Arrow points right ending at (100, 50), second line starts there going down
+    # This is a valid connection pattern (two arrows meeting at a point)
+    if test_case("perpendicular line from marker tip is OK",
+        '''<defs>
+             <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+               <polygon points="0 0, 10 3.5, 0 7" fill="#333"/>
+             </marker>
+           </defs>
+           <line id="arrow1" x1="0" y1="50" x2="100" y2="50" stroke="black" stroke-width="2" marker-end="url(#arrowhead)"/>
+           <line id="line2" x1="100" y1="50" x2="100" y2="150" stroke="black" stroke-width="2"/>''',
+        expected='clean'):
+        passed += 1
+    else:
+        failed += 1
+
     print("\n=== Parallel Lines ===")
 
     # Should trigger: two parallel lines too close (1px apart, need 3px min for stroke-width 1)
