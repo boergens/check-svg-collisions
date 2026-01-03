@@ -315,4 +315,4 @@ def extract_elements(svg_path: str, warn_missing_ids: bool = True) -> tuple:
             )
             rendered_markers.append((line.name, bbox))
 
-    return texts, rects, lines, polygons, rendered_markers, missing_id_warnings
+    return texts, rects, lines, polygons, rendered_markers, markers, missing_id_warnings

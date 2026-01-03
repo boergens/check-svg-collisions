@@ -2,15 +2,28 @@
 """Collision detection rules for SVG elements."""
 
 
-def check_collisions(texts, rects, lines, polygons, rendered_markers=None) -> tuple:
+MIN_MARKER_SEGMENT_RATIO = 2.0  # segment must be at least 2x marker width
+
+
+def check_collisions(texts, rects, lines, polygons, rendered_markers=None, markers=None) -> tuple:
     """Check all collision rules. Returns (issues, warnings)."""
     issues = []
     warnings = []
 
     if rendered_markers is None:
         rendered_markers = []
+    if markers is None:
+        markers = {}
 
     boxes = rects + polygons
+
+    # Rule 0: Lines with markers should have sufficient length
+    for line in lines:
+        if line.marker_end_id and line.marker_end_id in markers:
+            marker = markers[line.marker_end_id]
+            min_length = marker.width * MIN_MARKER_SEGMENT_RATIO
+            if line.length < min_length:
+                issues.append(("short marker segment", line.name, f"{line.length:.0f}px < {min_length:.0f}px"))
 
     # Rule 1: Text - Text: no overlap
     for i, t1 in enumerate(texts):

@@ -51,6 +51,10 @@ class Line:
     name: str
     marker_end_id: str = None
 
+    @property
+    def length(self) -> float:
+        return ((self.x2 - self.x1) ** 2 + (self.y2 - self.y1) ** 2) ** 0.5
+
     def _point_at_box_edge(self, px: float, py: float, box: BBox, eps: float = 5.0) -> bool:
         """Check if point is at box edge (not deep inside)."""
         in_x = box.x_min - eps <= px <= box.x_max + eps

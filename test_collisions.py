@@ -237,6 +237,34 @@ def main():
     else:
         failed += 1
 
+    print("\n=== Short Marker Segments ===")
+
+    # Should trigger: arrow segment too short for marker
+    if test_case("short marker segment",
+        '''<defs>
+             <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+               <polygon points="0 0, 10 3.5, 0 7" fill="#333"/>
+             </marker>
+           </defs>
+           <line id="arrow1" x1="0" y1="50" x2="15" y2="50" stroke="black" marker-end="url(#arrowhead)"/>''',
+        expected='issues'):
+        passed += 1
+    else:
+        failed += 1
+
+    # Should NOT trigger: arrow segment long enough
+    if test_case("adequate marker segment",
+        '''<defs>
+             <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+               <polygon points="0 0, 10 3.5, 0 7" fill="#333"/>
+             </marker>
+           </defs>
+           <line id="arrow1" x1="0" y1="50" x2="25" y2="50" stroke="black" marker-end="url(#arrowhead)"/>''',
+        expected='clean'):
+        passed += 1
+    else:
+        failed += 1
+
     print("\n=== Marker Collisions ===")
 
     # Should trigger: line passes through rendered arrowhead marker

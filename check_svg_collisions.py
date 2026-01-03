@@ -20,8 +20,8 @@ from collision_rules import check_collisions
 
 def check_file(svg_path: str) -> dict:
     """Check a single SVG file for collisions."""
-    texts, rects, lines, polygons, rendered_markers, missing_ids = extract_elements(svg_path)
-    issues, warnings = check_collisions(texts, rects, lines, polygons, rendered_markers)
+    texts, rects, lines, polygons, rendered_markers, markers, missing_ids = extract_elements(svg_path)
+    issues, warnings = check_collisions(texts, rects, lines, polygons, rendered_markers, markers)
 
     return {
         'file': os.path.basename(svg_path),
