@@ -34,6 +34,7 @@ export GEMINI_API_KEY="your-api-key"    # get at https://aistudio.google.com/api
 3. **Text ↔ Box**: Text must be fully inside or fully outside (no border crossing)
 4. **Box ↔ Box**: No overlap unless one fully contains the other
 5. **Line ↔ Box**: Lines must not pass through boxes (connecting to box edge is OK)
+   - Corner touches generate warnings (not errors)
 
 ## Testing
 
@@ -43,7 +44,7 @@ export DYLD_LIBRARY_PATH=/opt/homebrew/opt/cairo/lib
 python test_collisions.py
 ```
 
-13 test cases covering all collision rules with expected pass/fail outcomes.
+16 test cases covering all collision rules with expected issue/warning/clean outcomes.
 
 ## Files
 

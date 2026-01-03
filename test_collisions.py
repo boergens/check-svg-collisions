@@ -17,23 +17,39 @@ def write_svg(content: str) -> str:
     return path
 
 
-def test_case(name: str, svg_content: str, should_have_issues: bool):
-    """Run a test case and print result."""
+def test_case(name: str, svg_content: str, expected: str):
+    """Run a test case and print result.
+
+    expected: 'issues', 'warnings', or 'clean'
+    """
     path = write_svg(svg_content)
     result = check_file(path)
     os.unlink(path)
 
     has_issues = len(result['issues']) > 0
-    passed = has_issues == should_have_issues
+    has_warnings = len(result['warnings']) > 0
+
+    if expected == 'issues':
+        passed = has_issues
+    elif expected == 'warnings':
+        passed = has_warnings and not has_issues
+    else:  # clean
+        passed = not has_issues and not has_warnings
 
     status = "PASS" if passed else "FAIL"
-    issue_str = f" ({len(result['issues'])} issues)" if has_issues else ""
-    expected = "issues" if should_have_issues else "no issues"
+    counts = []
+    if has_issues:
+        counts.append(f"{len(result['issues'])} issues")
+    if has_warnings:
+        counts.append(f"{len(result['warnings'])} warnings")
+    count_str = f" ({', '.join(counts)})" if counts else ""
 
-    print(f"  {status}: {name} - expected {expected}{issue_str}")
+    print(f"  {status}: {name} - expected {expected}{count_str}")
     if not passed:
         for issue in result['issues']:
-            print(f"        {issue}")
+            print(f"        issue: {issue}")
+        for warning in result['warnings']:
+            print(f"        warning: {warning}")
     return passed
 
 
@@ -47,7 +63,7 @@ def main():
     if test_case("overlapping text",
         '''<text x="50" y="50" font-size="20">Hello</text>
            <text x="60" y="50" font-size="20">World</text>''',
-        should_have_issues=True):
+        expected='issues'):
         passed += 1
     else:
         failed += 1
@@ -56,7 +72,7 @@ def main():
     if test_case("separate text",
         '''<text x="10" y="50" font-size="12">Hello</text>
            <text x="100" y="50" font-size="12">World</text>''',
-        should_have_issues=False):
+        expected='clean'):
         passed += 1
     else:
         failed += 1
@@ -67,7 +83,7 @@ def main():
     if test_case("line through text",
         '''<text x="50" y="50" font-size="20">Hello</text>
            <line x1="0" y1="50" x2="200" y2="50" stroke="black"/>''',
-        should_have_issues=True):
+        expected='issues'):
         passed += 1
     else:
         failed += 1
@@ -76,7 +92,7 @@ def main():
     if test_case("line misses text",
         '''<text x="50" y="50" font-size="12">Hello</text>
            <line x1="0" y1="100" x2="200" y2="100" stroke="black"/>''',
-        should_have_issues=False):
+        expected='clean'):
         passed += 1
     else:
         failed += 1
@@ -87,7 +103,7 @@ def main():
     if test_case("text crosses box border",
         '''<rect x="50" y="30" width="50" height="50"/>
            <text x="40" y="50" font-size="20">Hello</text>''',
-        should_have_issues=True):
+        expected='issues'):
         passed += 1
     else:
         failed += 1
@@ -96,7 +112,7 @@ def main():
     if test_case("text inside box",
         '''<rect x="10" y="10" width="180" height="180"/>
            <text x="50" y="100" font-size="12">Hello</text>''',
-        should_have_issues=False):
+        expected='clean'):
         passed += 1
     else:
         failed += 1
@@ -105,7 +121,7 @@ def main():
     if test_case("text outside box",
         '''<rect x="100" y="100" width="50" height="50"/>
            <text x="10" y="50" font-size="12">Hello</text>''',
-        should_have_issues=False):
+        expected='clean'):
         passed += 1
     else:
         failed += 1
@@ -116,7 +132,7 @@ def main():
     if test_case("overlapping boxes",
         '''<rect x="10" y="10" width="80" height="80"/>
            <rect x="50" y="50" width="80" height="80"/>''',
-        should_have_issues=True):
+        expected='issues'):
         passed += 1
     else:
         failed += 1
@@ -125,7 +141,7 @@ def main():
     if test_case("nested boxes (containment)",
         '''<rect x="10" y="10" width="180" height="180"/>
            <rect x="50" y="50" width="50" height="50"/>''',
-        should_have_issues=False):
+        expected='clean'):
         passed += 1
     else:
         failed += 1
@@ -134,7 +150,7 @@ def main():
     if test_case("separate boxes",
         '''<rect x="10" y="10" width="40" height="40"/>
            <rect x="100" y="100" width="40" height="40"/>''',
-        should_have_issues=False):
+        expected='clean'):
         passed += 1
     else:
         failed += 1
@@ -145,7 +161,7 @@ def main():
     if test_case("line passes through box",
         '''<rect x="50" y="50" width="50" height="50"/>
            <line x1="0" y1="75" x2="200" y2="75" stroke="black"/>''',
-        should_have_issues=True):
+        expected='issues'):
         passed += 1
     else:
         failed += 1
@@ -154,7 +170,7 @@ def main():
     if test_case("line misses box",
         '''<rect x="50" y="50" width="50" height="50"/>
            <line x1="0" y1="10" x2="200" y2="10" stroke="black"/>''',
-        should_have_issues=False):
+        expected='clean'):
         passed += 1
     else:
         failed += 1
@@ -163,7 +179,35 @@ def main():
     if test_case("line connects to box edge",
         '''<rect x="50" y="50" width="50" height="50"/>
            <line x1="0" y1="75" x2="50" y2="75" stroke="black"/>''',
-        should_have_issues=False):
+        expected='clean'):
+        passed += 1
+    else:
+        failed += 1
+
+    # Should NOT trigger: diagonal line misses box (bounding boxes overlap but line doesn't intersect)
+    # This was causing false positives in fig1 - line from (160,230) to (110,280) vs box at (150,280)
+    if test_case("diagonal line misses box (bbox overlap)",
+        '''<rect x="150" y="280" width="100" height="50"/>
+           <line x1="160" y1="230" x2="110" y2="280" stroke="black"/>''',
+        expected='clean'):
+        passed += 1
+    else:
+        failed += 1
+
+    # Should trigger warning: diagonal line touches box corner
+    if test_case("diagonal line touches box corner",
+        '''<rect x="50" y="50" width="50" height="50"/>
+           <line x1="25" y1="25" x2="125" y2="125" stroke="black"/>''',
+        expected='warnings'):
+        passed += 1
+    else:
+        failed += 1
+
+    # Should trigger: diagonal line actually passes through box interior
+    if test_case("diagonal line through box interior",
+        '''<rect x="50" y="50" width="50" height="50"/>
+           <line x1="0" y1="60" x2="120" y2="90" stroke="black"/>''',
+        expected='issues'):
         passed += 1
     else:
         failed += 1
