@@ -212,6 +212,67 @@ def main():
     else:
         failed += 1
 
+    print("\n=== Defs Handling ===")
+
+    # Should NOT trigger: elements inside <defs> should be ignored
+    # This was causing false positives - arrowhead markers were being checked for collisions
+    if test_case("elements in defs are ignored",
+        '''<defs>
+             <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+               <polygon points="0 0, 10 3.5, 0 7" fill="#333"/>
+             </marker>
+           </defs>
+           <line x1="0" y1="3" x2="100" y2="3" stroke="black"/>''',
+        expected='clean'):
+        passed += 1
+    else:
+        failed += 1
+
+    print("\n=== Marker Collisions ===")
+
+    # Should trigger: line passes through rendered arrowhead marker
+    # Line 1 ends at (100, 50) with arrowhead, Line 2 crosses through that arrowhead
+    if test_case("line through arrowhead marker",
+        '''<defs>
+             <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+               <polygon points="0 0, 10 3.5, 0 7" fill="#333"/>
+             </marker>
+           </defs>
+           <line id="arrow1" x1="0" y1="50" x2="100" y2="50" stroke="black" marker-end="url(#arrowhead)"/>
+           <line id="line2" x1="100" y1="0" x2="100" y2="100" stroke="black"/>''',
+        expected='issues'):
+        passed += 1
+    else:
+        failed += 1
+
+    # Should NOT trigger: line misses arrowhead marker
+    if test_case("line misses arrowhead marker",
+        '''<defs>
+             <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+               <polygon points="0 0, 10 3.5, 0 7" fill="#333"/>
+             </marker>
+           </defs>
+           <line id="arrow1" x1="0" y1="50" x2="100" y2="50" stroke="black" marker-end="url(#arrowhead)"/>
+           <line id="line2" x1="50" y1="0" x2="50" y2="100" stroke="black"/>''',
+        expected='clean'):
+        passed += 1
+    else:
+        failed += 1
+
+    # Should NOT trigger: arrow pointing into a box (marker overlaps target box intentionally)
+    if test_case("arrow into box is OK",
+        '''<defs>
+             <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+               <polygon points="0 0, 10 3.5, 0 7" fill="#333"/>
+             </marker>
+           </defs>
+           <rect id="target-box" x="100" y="25" width="80" height="50"/>
+           <line id="arrow1" x1="0" y1="50" x2="100" y2="50" stroke="black" marker-end="url(#arrowhead)"/>''',
+        expected='clean'):
+        passed += 1
+    else:
+        failed += 1
+
     print(f"\n{'='*40}")
     print(f"Results: {passed} passed, {failed} failed")
     return 0 if failed == 0 else 1

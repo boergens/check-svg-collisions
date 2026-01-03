@@ -46,12 +46,22 @@ class BBox:
 
 
 @dataclass
+class Marker:
+    id: str
+    width: float
+    height: float
+    ref_x: float
+    ref_y: float
+
+
+@dataclass
 class Line:
     x1: float
     y1: float
     x2: float
     y2: float
     name: str
+    marker_end_id: str = None
 
     def _point_at_box_edge(self, px: float, py: float, box: BBox, eps: float = 5.0) -> bool:
         """Check if point is at box edge (not deep inside)."""
@@ -382,18 +392,35 @@ def extract_elements(svg_path: str, warn_missing_ids: bool = True) -> tuple:
             return temp_name
 
     # Build set of elements inside <defs> (these don't need IDs)
+    # Also parse marker definitions for later use
     defs_elements = set()
+    markers = {}  # id -> Marker
     for defs in root.iter():
         defs_tag = defs.tag.split('}')[-1] if '}' in defs.tag else defs.tag
         if defs_tag == 'defs':
             for child in defs.iter():
                 defs_elements.add(child)
+                child_tag = child.tag.split('}')[-1] if '}' in child.tag else child.tag
+                if child_tag == 'marker':
+                    marker_id = child.get('id')
+                    if marker_id:
+                        markers[marker_id] = Marker(
+                            id=marker_id,
+                            width=float(child.get('markerWidth', 10)),
+                            height=float(child.get('markerHeight', 7)),
+                            ref_x=float(child.get('refX', 0)),
+                            ref_y=float(child.get('refY', 0)),
+                        )
 
     # Find all elements (handle namespace)
     for elem in root.iter():
         tag = elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
         in_defs = elem in defs_elements
         name = get_name(elem, tag, skip_warning=in_defs)
+
+        # Skip elements inside <defs> - they're definitions (markers, patterns, etc.)
+        if in_defs:
+            continue
 
         if tag == 'text':
             x = float(elem.get('x', 0))
@@ -433,7 +460,12 @@ def extract_elements(svg_path: str, warn_missing_ids: bool = True) -> tuple:
             y1 = float(elem.get('y1', 0))
             x2 = float(elem.get('x2', 0))
             y2 = float(elem.get('y2', 0))
-            line = Line(x1, y1, x2, y2, name)
+            # Check for marker-end reference
+            marker_end_id = None
+            marker_end = elem.get('marker-end', '')
+            if marker_end.startswith('url(#') and marker_end.endswith(')'):
+                marker_end_id = marker_end[5:-1]
+            line = Line(x1, y1, x2, y2, name, marker_end_id)
             lines.append(line)
 
         elif tag == 'polygon' or tag == 'polyline':
@@ -449,19 +481,51 @@ def extract_elements(svg_path: str, warn_missing_ids: bool = True) -> tuple:
         elif tag == 'path':
             d = elem.get('d', '')
             if d:
+                # Check for marker-end reference
+                marker_end_id = None
+                marker_end = elem.get('marker-end', '')
+                if marker_end.startswith('url(#') and marker_end.endswith(')'):
+                    marker_end_id = marker_end[5:-1]
                 path_segments = parse_path_to_lines(d)
                 for idx, (x1, y1, x2, y2) in enumerate(path_segments):
                     segment_name = f"{name}_seg{idx}" if len(path_segments) > 1 else name
-                    line = Line(x1, y1, x2, y2, segment_name)
+                    # Only the last segment gets the marker-end
+                    seg_marker = marker_end_id if idx == len(path_segments) - 1 else None
+                    line = Line(x1, y1, x2, y2, segment_name, seg_marker)
                     lines.append(line)
 
-    return texts, rects, lines, polygons, missing_id_warnings
+    # Create bounding boxes for rendered markers at line endpoints
+    # Keep markers separate - they need special collision handling
+    rendered_markers = []  # list of (owner_line_name, BBox)
+    for line in lines:
+        if line.marker_end_id and line.marker_end_id in markers:
+            marker = markers[line.marker_end_id]
+            # Marker is rendered at line endpoint (x2, y2)
+            # The refX, refY point aligns with the endpoint
+            # Create a bbox centered around the endpoint with marker dimensions
+            x2, y2 = line.x2, line.y2
+            # Simplified: create a box around the endpoint with marker size
+            # Offset by ref point (marker's reference point aligns with endpoint)
+            half_w = marker.width / 2
+            half_h = marker.height / 2
+            bbox = BBox(
+                x2 - half_w, y2 - half_h,
+                x2 + half_w, y2 + half_h,
+                f"{line.name}:marker",
+                'marker'
+            )
+            rendered_markers.append((line.name, bbox))
+
+    return texts, rects, lines, polygons, rendered_markers, missing_id_warnings
 
 
-def check_collisions(texts, rects, lines, polygons) -> tuple:
+def check_collisions(texts, rects, lines, polygons, rendered_markers=None) -> tuple:
     """Check all collision rules. Returns (issues, warnings)."""
     issues = []
     warnings = []
+
+    if rendered_markers is None:
+        rendered_markers = []
 
     # Combine rects and polygons as "boxes"
     boxes = rects + polygons
@@ -508,13 +572,25 @@ def check_collisions(texts, rects, lines, polygons) -> tuple:
             elif line.touches_box_corner(box):
                 warnings.append(("line touches corner", line.name, box.name))
 
+    # Rule 6: Line ↔ Marker - lines must not pass through rendered markers
+    # (except for the line that owns the marker)
+    for owner_name, marker_box in rendered_markers:
+        for line in lines:
+            # Skip if this line owns the marker
+            if line.name == owner_name or line.name.startswith(owner_name + "_seg"):
+                continue
+            if line.passes_through_box(marker_box):
+                issues.append(("line through marker", line.name, marker_box.name))
+            elif line.touches_box_corner(marker_box):
+                warnings.append(("line touches marker corner", line.name, marker_box.name))
+
     return issues, warnings
 
 
 def check_file(svg_path: str) -> dict:
     """Check a single SVG file for collisions."""
-    texts, rects, lines, polygons, missing_ids = extract_elements(svg_path)
-    issues, warnings = check_collisions(texts, rects, lines, polygons)
+    texts, rects, lines, polygons, rendered_markers, missing_ids = extract_elements(svg_path)
+    issues, warnings = check_collisions(texts, rects, lines, polygons, rendered_markers)
 
     return {
         'file': os.path.basename(svg_path),
