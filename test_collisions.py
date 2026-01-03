@@ -280,13 +280,14 @@ def main():
     print("\n=== Short Marker Segments ===")
 
     # Should trigger: arrow segment too short for marker
+    # Line is 10px, marker is 10px, min = 10 * 1.5 = 15px
     if test_case("short marker segment",
         '''<defs>
              <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
                <polygon points="0 0, 10 3.5, 0 7" fill="#333"/>
              </marker>
            </defs>
-           <line id="arrow1" x1="0" y1="50" x2="15" y2="50" stroke="black" marker-end="url(#arrowhead)"/>''',
+           <line id="arrow1" x1="0" y1="50" x2="10" y2="50" stroke="black" marker-end="url(#arrowhead)"/>''',
         expected='issues'):
         passed += 1
     else:
@@ -301,6 +302,20 @@ def main():
            </defs>
            <line id="arrow1" x1="0" y1="50" x2="25" y2="50" stroke="black" marker-end="url(#arrowhead)"/>''',
         expected='clean'):
+        passed += 1
+    else:
+        failed += 1
+
+    # Should trigger: stroke-width scales the marker, so line needs to be longer
+    # Line is 25px, marker is 10 * stroke-width(2) = 20px, min = 20 * 1.5 = 30px
+    if test_case("short marker segment with stroke-width scaling",
+        '''<defs>
+             <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+               <polygon points="0 0, 10 3.5, 0 7" fill="#333"/>
+             </marker>
+           </defs>
+           <line id="arrow1" x1="0" y1="50" x2="25" y2="50" stroke="black" stroke-width="2" marker-end="url(#arrowhead)"/>''',
+        expected='issues'):
         passed += 1
     else:
         failed += 1

@@ -3,7 +3,7 @@
 
 from measure_text import measure_en_dash_width
 
-MIN_MARKER_SEGMENT_RATIO = 2.0  # segment must be at least 2x marker width
+MIN_MARKER_SEGMENT_RATIO = 1.5  # segment must be at least 1.5x marker width
 
 
 def nearest_gap(text, box) -> tuple:
@@ -57,7 +57,7 @@ def check_collisions(texts, rects, lines, polygons, rendered_markers=None, marke
     for line in lines:
         if line.marker_end_id and line.marker_end_id in markers:
             marker = markers[line.marker_end_id]
-            min_length = marker.width * MIN_MARKER_SEGMENT_RATIO
+            min_length = marker.width * line.stroke_width * MIN_MARKER_SEGMENT_RATIO
             if line.length < min_length:
                 issues.append(("short marker segment", line.name, f"{line.length:.0f}px < {min_length:.0f}px"))
 
