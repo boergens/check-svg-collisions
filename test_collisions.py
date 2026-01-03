@@ -330,6 +330,82 @@ def main():
     else:
         failed += 1
 
+    print("\n=== Parallel Lines ===")
+
+    # Should trigger: two parallel lines too close (1px apart, need 3px min for stroke-width 1)
+    if test_case("parallel lines too close",
+        '''<line id="line1" x1="10" y1="50" x2="100" y2="50" stroke="black" stroke-width="1"/>
+           <line id="line2" x1="10" y1="51" x2="100" y2="51" stroke="black" stroke-width="1"/>''',
+        expected='issues'):
+        passed += 1
+    else:
+        failed += 1
+
+    # Should NOT trigger: parallel lines far enough apart (5px apart, 3px min)
+    if test_case("parallel lines adequate distance",
+        '''<line id="line1" x1="10" y1="50" x2="100" y2="50" stroke="black" stroke-width="1"/>
+           <line id="line2" x1="10" y1="55" x2="100" y2="55" stroke="black" stroke-width="1"/>''',
+        expected='clean'):
+        passed += 1
+    else:
+        failed += 1
+
+    # Should NOT trigger: parallel lines don't overlap in projection
+    if test_case("parallel lines non-overlapping range",
+        '''<line id="line1" x1="10" y1="50" x2="50" y2="50" stroke="black" stroke-width="1"/>
+           <line id="line2" x1="60" y1="51" x2="100" y2="51" stroke="black" stroke-width="1"/>''',
+        expected='clean'):
+        passed += 1
+    else:
+        failed += 1
+
+    # Should NOT trigger: non-parallel lines close together
+    if test_case("non-parallel lines close",
+        '''<line id="line1" x1="10" y1="50" x2="100" y2="50" stroke="black"/>
+           <line id="line2" x1="10" y1="51" x2="100" y2="60" stroke="black"/>''',
+        expected='clean'):
+        passed += 1
+    else:
+        failed += 1
+
+    print("\n=== Line to Box Edge ===")
+
+    # Should trigger: horizontal line too close to box edge (1px gap, need 3px for stroke-width 1)
+    if test_case("line too close to box edge",
+        '''<rect id="box1" x="50" y="50" width="100" height="50"/>
+           <line id="line1" x1="60" y1="49" x2="140" y2="49" stroke="black" stroke-width="1"/>''',
+        expected='issues'):
+        passed += 1
+    else:
+        failed += 1
+
+    # Should NOT trigger: line far enough from box edge (5px gap)
+    if test_case("line adequate distance from box edge",
+        '''<rect id="box1" x="50" y="50" width="100" height="50"/>
+           <line id="line1" x1="60" y1="45" x2="140" y2="45" stroke="black" stroke-width="1"/>''',
+        expected='clean'):
+        passed += 1
+    else:
+        failed += 1
+
+    # Should NOT trigger: diagonal line near box (not parallel to edge)
+    if test_case("diagonal line near box edge",
+        '''<rect id="box1" x="50" y="50" width="100" height="50"/>
+           <line id="line1" x1="60" y1="45" x2="140" y2="48" stroke="black"/>''',
+        expected='clean'):
+        passed += 1
+    else:
+        failed += 1
+
+    # Should NOT trigger: line doesn't overlap box in projection
+    if test_case("line outside box range",
+        '''<rect id="box1" x="50" y="50" width="100" height="50"/>
+           <line id="line1" x1="10" y1="49" x2="40" y2="49" stroke="black" stroke-width="1"/>''',
+        expected='clean'):
+        passed += 1
+    else:
+        failed += 1
+
     print(f"\n{'='*40}")
     print(f"Results: {passed} passed, {failed} failed")
     return 0 if failed == 0 else 1

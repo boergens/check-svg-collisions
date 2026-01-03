@@ -274,7 +274,8 @@ def extract_elements(svg_path: str, warn_missing_ids: bool = True) -> tuple:
             marker_end = elem.get('marker-end', '')
             if marker_end.startswith('url(#') and marker_end.endswith(')'):
                 marker_end_id = marker_end[5:-1]
-            line = Line(x1, y1, x2, y2, name, marker_end_id)
+            stroke_width = float(elem.get('stroke-width', 1))
+            line = Line(x1, y1, x2, y2, name, marker_end_id, stroke_width)
             lines.append(line)
 
         elif tag == 'polygon' or tag == 'polyline':
@@ -294,11 +295,12 @@ def extract_elements(svg_path: str, warn_missing_ids: bool = True) -> tuple:
                 marker_end = elem.get('marker-end', '')
                 if marker_end.startswith('url(#') and marker_end.endswith(')'):
                     marker_end_id = marker_end[5:-1]
+                stroke_width = float(elem.get('stroke-width', 1))
                 path_segments = parse_path_to_lines(d)
                 for idx, (x1, y1, x2, y2) in enumerate(path_segments):
                     segment_name = f"{name}_seg{idx}" if len(path_segments) > 1 else name
                     seg_marker = marker_end_id if idx == len(path_segments) - 1 else None
-                    line = Line(x1, y1, x2, y2, segment_name, seg_marker)
+                    line = Line(x1, y1, x2, y2, segment_name, seg_marker, stroke_width)
                     lines.append(line)
 
     rendered_markers = []

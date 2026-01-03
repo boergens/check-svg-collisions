@@ -120,4 +120,26 @@ def check_collisions(texts, rects, lines, polygons, rendered_markers=None, marke
             elif line.touches_box_corner(marker_box):
                 warnings.append(("line touches marker corner", line.name, marker_box.name))
 
+    # Rule 7: Parallel lines too close
+    for i, l1 in enumerate(lines):
+        for l2 in lines[i + 1:]:
+            if not l1.is_parallel_to(l2):
+                continue
+            if not l1.overlaps_in_direction(l2):
+                continue
+            dist = l1.perpendicular_distance_to(l2)
+            min_dist = max(l1.stroke_width, l2.stroke_width) * 3
+            if dist < min_dist:
+                issues.append(("parallel lines too close", l1.name, f"{l2.name} ({dist:.1f}px < {min_dist:.1f}px)"))
+
+    # Rule 8: Line too close to box edge
+    for line in lines:
+        for box in boxes:
+            dist = line.distance_to_box_edge(box)
+            if dist is None:
+                continue
+            min_dist = line.stroke_width * 3
+            if 0 < dist < min_dist:
+                issues.append(("line too close to box edge", line.name, f"{box.name} ({dist:.1f}px < {min_dist:.1f}px)"))
+
     return issues, warnings

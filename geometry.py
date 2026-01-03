@@ -52,12 +52,13 @@ class Line:
     y2: float
     name: str
     marker_end_id: str = None
+    stroke_width: float = 1.0
 
     @property
     def length(self) -> float:
         return ((self.x2 - self.x1) ** 2 + (self.y2 - self.y1) ** 2) ** 0.5
 
-    def _point_at_box_edge(self, px: float, py: float, box: BBox, eps: float = 5.0) -> bool:
+    def _point_at_box_edge(self, px: float, py: float, box: BBox, eps: float = 1.0) -> bool:
         """Check if point is at box edge (not deep inside)."""
         in_x = box.x_min - eps <= px <= box.x_max + eps
         in_y = box.y_min - eps <= py <= box.y_max + eps
@@ -161,3 +162,73 @@ class Line:
         if self.passes_through_box(box):
             return False
         return self._touches_corner(box)
+
+    def direction(self) -> tuple:
+        """Return normalized direction vector (dx, dy)."""
+        dx, dy = self.x2 - self.x1, self.y2 - self.y1
+        length = (dx * dx + dy * dy) ** 0.5
+        if length < 0.001:
+            return (0, 0)
+        return (dx / length, dy / length)
+
+    def is_parallel_to(self, other: 'Line', eps: float = 0.001) -> bool:
+        """Check if two lines are exactly parallel (within floating point tolerance)."""
+        d1 = self.direction()
+        d2 = other.direction()
+        if d1 == (0, 0) or d2 == (0, 0):
+            return False
+        cross = abs(d1[0] * d2[1] - d1[1] * d2[0])
+        return cross < eps
+
+    def perpendicular_distance_to(self, other: 'Line') -> float:
+        """Calculate perpendicular distance between two parallel lines."""
+        dx, dy = self.direction()
+        px, py = self.x1 - other.x1, self.y1 - other.y1
+        return abs(px * (-dy) + py * dx)
+
+    def _project_onto_axis(self, axis_x: float, axis_y: float) -> tuple:
+        """Project line endpoints onto an axis, return (min, max) of projections."""
+        p1 = self.x1 * axis_x + self.y1 * axis_y
+        p2 = self.x2 * axis_x + self.y2 * axis_y
+        return (min(p1, p2), max(p1, p2))
+
+    def overlaps_in_direction(self, other: 'Line') -> bool:
+        """Check if two parallel lines overlap when projected onto their shared direction."""
+        dx, dy = self.direction()
+        if dx == 0 and dy == 0:
+            return False
+        min1, max1 = self._project_onto_axis(dx, dy)
+        min2, max2 = other._project_onto_axis(dx, dy)
+        return max1 > min2 and max2 > min1
+
+    def distance_to_box_edge(self, box: BBox) -> float | None:
+        """
+        Calculate perpendicular distance to nearest parallel box edge.
+        Returns None if line is not parallel to any box edge.
+        """
+        dx, dy = self.direction()
+        if dx == 0 and dy == 0:
+            return None
+
+        is_horizontal = abs(dy) < 0.001
+        is_vertical = abs(dx) < 0.001
+
+        if not is_horizontal and not is_vertical:
+            return None
+
+        if is_horizontal:
+            line_y = self.y1
+            line_min_x, line_max_x = min(self.x1, self.x2), max(self.x1, self.x2)
+            distances = []
+            if line_max_x > box.x_min and line_min_x < box.x_max:
+                distances.append(abs(line_y - box.y_min))
+                distances.append(abs(line_y - box.y_max))
+            return min(distances) if distances else None
+        else:
+            line_x = self.x1
+            line_min_y, line_max_y = min(self.y1, self.y2), max(self.y1, self.y2)
+            distances = []
+            if line_max_y > box.y_min and line_min_y < box.y_max:
+                distances.append(abs(line_x - box.x_min))
+                distances.append(abs(line_x - box.x_max))
+            return min(distances) if distances else None
