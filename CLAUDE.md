@@ -35,6 +35,16 @@ export GEMINI_API_KEY="your-api-key"    # get at https://aistudio.google.com/api
 4. **Box ↔ Box**: No overlap unless one fully contains the other
 5. **Line ↔ Box**: Lines must not pass through boxes (connecting to box edge is OK)
 
+## Testing
+
+```bash
+source venv/bin/activate
+export DYLD_LIBRARY_PATH=/opt/homebrew/opt/cairo/lib
+python test_collisions.py
+```
+
+13 test cases covering all collision rules with expected pass/fail outcomes.
+
 ## Files
 
 - `check_svg_collisions.py` - Main collision detection logic
@@ -42,3 +52,4 @@ export GEMINI_API_KEY="your-api-key"    # get at https://aistudio.google.com/api
 - `check_svg.sh` - Wrapper script that sets up environment
 - `gemini_feedback.py` - Gemini API integration for figure feedback
 - `gemini_feedback.sh` - Wrapper script for Gemini feedback
+- `test_collisions.py` - Test suite for collision detection
