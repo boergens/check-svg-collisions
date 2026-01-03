@@ -53,6 +53,19 @@ class Line:
     y2: float
     name: str
 
+    def _point_at_box_edge(self, px: float, py: float, box: BBox, eps: float = 5.0) -> bool:
+        """Check if point is at box edge (not deep inside)."""
+        in_x = box.x_min - eps <= px <= box.x_max + eps
+        in_y = box.y_min - eps <= py <= box.y_max + eps
+        if not (in_x and in_y):
+            return False
+        # Must be near an edge, not deep inside
+        near_left = abs(px - box.x_min) <= eps
+        near_right = abs(px - box.x_max) <= eps
+        near_top = abs(py - box.y_min) <= eps
+        near_bottom = abs(py - box.y_max) <= eps
+        return near_left or near_right or near_top or near_bottom
+
     def intersects_box(self, box: BBox, eps: float = 1.0) -> bool:
         """Check if line segment passes through box interior."""
         # Quick bounding box check
@@ -75,6 +88,17 @@ class Line:
             return False
 
         # Line passes through or near the box
+        return True
+
+    def passes_through_box(self, box: BBox) -> bool:
+        """Check if line passes through box (not just connects to it)."""
+        if not self.intersects_box(box):
+            return False
+        # If either endpoint is at box edge, it's a connection, not a pass-through
+        if self._point_at_box_edge(self.x1, self.y1, box):
+            return False
+        if self._point_at_box_edge(self.x2, self.y2, box):
+            return False
         return True
 
 
@@ -369,6 +393,12 @@ def check_collisions(texts, rects, lines, polygons) -> list:
             if b1.overlaps(b2):
                 if not (b1.contains(b2) or b2.contains(b1)):
                     issues.append(("box overlap", b1.name, b2.name))
+
+    # Rule 5: Line ↔ Box - line must not pass through box (connecting to box is OK)
+    for line in lines:
+        for box in boxes:
+            if line.passes_through_box(box):
+                issues.append(("line through box", line.name, box.name))
 
     return issues
 
