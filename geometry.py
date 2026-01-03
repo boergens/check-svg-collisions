@@ -1,0 +1,154 @@
+#!/usr/bin/env python3
+"""Geometric primitives for SVG collision detection."""
+
+from dataclasses import dataclass
+
+
+@dataclass
+class BBox:
+    x_min: float
+    y_min: float
+    x_max: float
+    y_max: float
+    name: str
+    elem_type: str  # 'text', 'rect', 'line', 'polygon'
+
+    def overlaps(self, other: 'BBox', eps: float = 0.5) -> bool:
+        if self.x_max <= other.x_min + eps or other.x_max <= self.x_min + eps:
+            return False
+        if self.y_max <= other.y_min + eps or other.y_max <= self.y_min + eps:
+            return False
+        return True
+
+    def contains(self, other: 'BBox') -> bool:
+        return (self.x_min <= other.x_min and self.x_max >= other.x_max and
+                self.y_min <= other.y_min and self.y_max >= other.y_max)
+
+    @property
+    def width(self):
+        return self.x_max - self.x_min
+
+    @property
+    def height(self):
+        return self.y_max - self.y_min
+
+
+@dataclass
+class Marker:
+    id: str
+    width: float
+    height: float
+    ref_x: float
+    ref_y: float
+
+
+@dataclass
+class Line:
+    x1: float
+    y1: float
+    x2: float
+    y2: float
+    name: str
+    marker_end_id: str = None
+
+    def _point_at_box_edge(self, px: float, py: float, box: BBox, eps: float = 5.0) -> bool:
+        """Check if point is at box edge (not deep inside)."""
+        in_x = box.x_min - eps <= px <= box.x_max + eps
+        in_y = box.y_min - eps <= py <= box.y_max + eps
+        if not (in_x and in_y):
+            return False
+        near_left = abs(px - box.x_min) <= eps
+        near_right = abs(px - box.x_max) <= eps
+        near_top = abs(py - box.y_min) <= eps
+        near_bottom = abs(py - box.y_max) <= eps
+        return near_left or near_right or near_top or near_bottom
+
+    def _segments_intersect(self, ax1, ay1, ax2, ay2, bx1, by1, bx2, by2) -> bool:
+        """Check if two line segments intersect using cross products."""
+        def cross(o, a, b):
+            return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+        p1, p2 = (ax1, ay1), (ax2, ay2)
+        p3, p4 = (bx1, by1), (bx2, by2)
+
+        d1 = cross(p3, p4, p1)
+        d2 = cross(p3, p4, p2)
+        d3 = cross(p1, p2, p3)
+        d4 = cross(p1, p2, p4)
+
+        if ((d1 > 0 and d2 < 0) or (d1 < 0 and d2 > 0)) and \
+           ((d3 > 0 and d4 < 0) or (d3 < 0 and d4 > 0)):
+            return True
+        return False
+
+    def _point_in_box(self, px, py, box: BBox, eps: float = 0.5) -> bool:
+        """Check if point is strictly inside box (not on edge)."""
+        return (box.x_min + eps < px < box.x_max - eps and
+                box.y_min + eps < py < box.y_max - eps)
+
+    def intersects_box(self, box: BBox, eps: float = 1.0) -> bool:
+        """Check if line segment actually intersects box (not just bounding box overlap)."""
+        line_x_min, line_x_max = min(self.x1, self.x2), max(self.x1, self.x2)
+        line_y_min, line_y_max = min(self.y1, self.y2), max(self.y1, self.y2)
+
+        if line_x_max < box.x_min - eps or line_x_min > box.x_max + eps:
+            return False
+        if line_y_max < box.y_min - eps or line_y_min > box.y_max + eps:
+            return False
+
+        if self._point_in_box(self.x1, self.y1, box):
+            return True
+        if self._point_in_box(self.x2, self.y2, box):
+            return True
+
+        edges = [
+            (box.x_min, box.y_min, box.x_max, box.y_min),  # top
+            (box.x_max, box.y_min, box.x_max, box.y_max),  # right
+            (box.x_min, box.y_max, box.x_max, box.y_max),  # bottom
+            (box.x_min, box.y_min, box.x_min, box.y_max),  # left
+        ]
+        for ex1, ey1, ex2, ey2 in edges:
+            if self._segments_intersect(self.x1, self.y1, self.x2, self.y2,
+                                        ex1, ey1, ex2, ey2):
+                return True
+        return False
+
+    def _touches_corner(self, box: BBox, eps: float = 2.0) -> bool:
+        """Check if line touches a box corner without passing through."""
+        corners = [
+            (box.x_min, box.y_min), (box.x_max, box.y_min),
+            (box.x_min, box.y_max), (box.x_max, box.y_max),
+        ]
+        for cx, cy in corners:
+            dx, dy = self.x2 - self.x1, self.y2 - self.y1
+            if abs(dx) < 0.001 and abs(dy) < 0.001:
+                continue
+            if abs(dx) > abs(dy):
+                t = (cx - self.x1) / dx
+                if 0 <= t <= 1:
+                    y_on_line = self.y1 + t * dy
+                    if abs(y_on_line - cy) < eps:
+                        return True
+            else:
+                t = (cy - self.y1) / dy
+                if 0 <= t <= 1:
+                    x_on_line = self.x1 + t * dx
+                    if abs(x_on_line - cx) < eps:
+                        return True
+        return False
+
+    def passes_through_box(self, box: BBox) -> bool:
+        """Check if line passes through box (not just connects to it)."""
+        if not self.intersects_box(box):
+            return False
+        if self._point_at_box_edge(self.x1, self.y1, box):
+            return False
+        if self._point_at_box_edge(self.x2, self.y2, box):
+            return False
+        return True
+
+    def touches_box_corner(self, box: BBox) -> bool:
+        """Check if line touches box corner (warning, not error)."""
+        if self.passes_through_box(box):
+            return False
+        return self._touches_corner(box)

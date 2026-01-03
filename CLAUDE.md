@@ -54,11 +54,14 @@ export DYLD_LIBRARY_PATH=/opt/homebrew/opt/cairo/lib
 python test_collisions.py
 ```
 
-16 test cases covering all collision rules with expected issue/warning/clean outcomes.
+20 test cases covering all collision rules with expected issue/warning/clean outcomes.
 
 ## Files
 
-- `check_svg_collisions.py` - Main collision detection logic
+- `check_svg_collisions.py` - CLI entry point and main API (`check_file`)
+- `geometry.py` - Geometric primitives (BBox, Line, Marker)
+- `svg_parser.py` - SVG parsing and element extraction
+- `collision_rules.py` - Collision detection rules
 - `measure_text.py` - Cairo-based text dimension measurement
 - `check_svg.sh` - Wrapper script that sets up environment
 - `gemini_feedback.py` - Gemini API integration for figure feedback
