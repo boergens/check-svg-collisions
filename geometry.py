@@ -141,6 +141,9 @@ class Line:
         """Check if line passes through box (not just connects to it)."""
         if not self.intersects_box(box):
             return False
+        # Line fully contained inside box is OK (e.g., legend samples)
+        if self._point_in_box(self.x1, self.y1, box) and self._point_in_box(self.x2, self.y2, box):
+            return False
         if self._point_at_box_edge(self.x1, self.y1, box):
             return False
         if self._point_at_box_edge(self.x2, self.y2, box):

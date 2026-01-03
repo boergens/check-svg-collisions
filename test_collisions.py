@@ -184,6 +184,15 @@ def main():
     else:
         failed += 1
 
+    # Should NOT trigger: line fully contained inside box (e.g., legend samples)
+    if test_case("line inside box",
+        '''<rect x="10" y="10" width="180" height="180"/>
+           <line x1="50" y1="100" x2="150" y2="100" stroke="black"/>''',
+        expected='clean'):
+        passed += 1
+    else:
+        failed += 1
+
     # Should NOT trigger: diagonal line misses box (bounding boxes overlap but line doesn't intersect)
     # This was causing false positives in fig1 - line from (160,230) to (110,280) vs box at (150,280)
     if test_case("diagonal line misses box (bbox overlap)",
