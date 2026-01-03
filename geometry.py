@@ -94,31 +94,37 @@ class Line:
                 box.y_min + eps < py < box.y_max - eps)
 
     def intersects_box(self, box: BBox, eps: float = 1.0) -> bool:
-        """Check if line segment actually intersects box (not just bounding box overlap)."""
-        line_x_min, line_x_max = min(self.x1, self.x2), max(self.x1, self.x2)
-        line_y_min, line_y_max = min(self.y1, self.y2), max(self.y1, self.y2)
+        """Check if line segment intersects box using Liang-Barsky clipping."""
+        dx = self.x2 - self.x1
+        dy = self.y2 - self.y1
 
-        if line_x_max < box.x_min - eps or line_x_min > box.x_max + eps:
-            return False
-        if line_y_max < box.y_min - eps or line_y_min > box.y_max + eps:
-            return False
+        t_min, t_max = 0.0, 1.0
 
-        if self._point_in_box(self.x1, self.y1, box):
-            return True
-        if self._point_in_box(self.x2, self.y2, box):
-            return True
+        # Check x bounds
+        if abs(dx) > 0.0001:
+            t1 = (box.x_min - eps - self.x1) / dx
+            t2 = (box.x_max + eps - self.x1) / dx
+            if t1 > t2:
+                t1, t2 = t2, t1
+            t_min = max(t_min, t1)
+            t_max = min(t_max, t2)
+        else:
+            if self.x1 < box.x_min - eps or self.x1 > box.x_max + eps:
+                return False
 
-        edges = [
-            (box.x_min, box.y_min, box.x_max, box.y_min),  # top
-            (box.x_max, box.y_min, box.x_max, box.y_max),  # right
-            (box.x_min, box.y_max, box.x_max, box.y_max),  # bottom
-            (box.x_min, box.y_min, box.x_min, box.y_max),  # left
-        ]
-        for ex1, ey1, ex2, ey2 in edges:
-            if self._segments_intersect(self.x1, self.y1, self.x2, self.y2,
-                                        ex1, ey1, ex2, ey2):
-                return True
-        return False
+        # Check y bounds
+        if abs(dy) > 0.0001:
+            t1 = (box.y_min - eps - self.y1) / dy
+            t2 = (box.y_max + eps - self.y1) / dy
+            if t1 > t2:
+                t1, t2 = t2, t1
+            t_min = max(t_min, t1)
+            t_max = min(t_max, t2)
+        else:
+            if self.y1 < box.y_min - eps or self.y1 > box.y_max + eps:
+                return False
+
+        return t_min <= t_max
 
     def _touches_corner(self, box: BBox, eps: float = 2.0) -> bool:
         """Check if line touches a box corner without passing through."""
@@ -144,17 +150,76 @@ class Line:
                         return True
         return False
 
+    def _clip_to_box(self, box: BBox) -> tuple:
+        """Return (t_min, t_max) for line clipped to box, or None if no intersection."""
+        dx = self.x2 - self.x1
+        dy = self.y2 - self.y1
+        t_min, t_max = 0.0, 1.0
+
+        if abs(dx) > 0.0001:
+            t1 = (box.x_min - self.x1) / dx
+            t2 = (box.x_max - self.x1) / dx
+            if t1 > t2:
+                t1, t2 = t2, t1
+            t_min = max(t_min, t1)
+            t_max = min(t_max, t2)
+        else:
+            if self.x1 < box.x_min or self.x1 > box.x_max:
+                return None
+
+        if abs(dy) > 0.0001:
+            t1 = (box.y_min - self.y1) / dy
+            t2 = (box.y_max - self.y1) / dy
+            if t1 > t2:
+                t1, t2 = t2, t1
+            t_min = max(t_min, t1)
+            t_max = min(t_max, t2)
+        else:
+            if self.y1 < box.y_min or self.y1 > box.y_max:
+                return None
+
+        if t_min > t_max:
+            return None
+        return (t_min, t_max)
+
     def passes_through_box(self, box: BBox) -> bool:
-        """Check if line passes through box (not just connects to it)."""
-        if not self.intersects_box(box):
+        """Check if line crosses through box (not just touches corner/edge)."""
+        clip = self._clip_to_box(box)
+        if clip is None:
             return False
-        # Line fully contained inside box is OK (e.g., legend samples)
-        if self._point_in_box(self.x1, self.y1, box) and self._point_in_box(self.x2, self.y2, box):
+
+        t_min, t_max = clip
+
+        # Line fully inside box - OK
+        if t_min <= 0.001 and t_max >= 0.999:
+            p1_inside = self._point_in_box(self.x1, self.y1, box)
+            p2_inside = self._point_in_box(self.x2, self.y2, box)
+            if p1_inside and p2_inside:
+                return False
+
+        # Corner touch - clipped segment is essentially a point
+        if abs(t_max - t_min) < 0.01:
             return False
-        if self._point_at_box_edge(self.x1, self.y1, box):
+
+        # Compute clipped segment endpoints
+        dx, dy = self.x2 - self.x1, self.y2 - self.y1
+        cx1 = self.x1 + t_min * dx
+        cy1 = self.y1 + t_min * dy
+        cx2 = self.x1 + t_max * dx
+        cy2 = self.y1 + t_max * dy
+
+        # Check if both clipped endpoints are on same edge (line runs along edge)
+        eps = 1.0
+        same_edge = (
+            (abs(cx1 - box.x_min) <= eps and abs(cx2 - box.x_min) <= eps) or
+            (abs(cx1 - box.x_max) <= eps and abs(cx2 - box.x_max) <= eps) or
+            (abs(cy1 - box.y_min) <= eps and abs(cy2 - box.y_min) <= eps) or
+            (abs(cy1 - box.y_max) <= eps and abs(cy2 - box.y_max) <= eps)
+        )
+        if same_edge:
             return False
-        if self._point_at_box_edge(self.x2, self.y2, box):
-            return False
+
+        # Clipped endpoints on different edges - line crosses through
         return True
 
     def touches_box_corner(self, box: BBox) -> bool:

@@ -223,19 +223,39 @@ def main():
     else:
         failed += 1
 
-    # Should trigger warning: diagonal line touches box corner
-    if test_case("diagonal line touches box corner",
+    # Should trigger warning: line grazes box corner without entering interior
+    # Line from (0,100) to (100,0) passes through corner (50,50) but stays outside
+    if test_case("line grazes box corner",
         '''<rect x="50" y="50" width="50" height="50"/>
-           <line x1="25" y1="25" x2="125" y2="125" stroke="black"/>''',
+           <line x1="0" y1="100" x2="100" y2="0" stroke="black"/>''',
         expected='warnings'):
         passed += 1
     else:
         failed += 1
 
-    # Should trigger: diagonal line actually passes through box interior
+    # Should trigger: diagonal from corner to corner passes through interior
+    if test_case("diagonal corner-to-corner through interior",
+        '''<rect x="50" y="50" width="50" height="50"/>
+           <line x1="25" y1="25" x2="125" y2="125" stroke="black"/>''',
+        expected='issues'):
+        passed += 1
+    else:
+        failed += 1
+
+    # Should trigger: diagonal line through box interior
     if test_case("diagonal line through box interior",
         '''<rect x="50" y="50" width="50" height="50"/>
            <line x1="0" y1="60" x2="120" y2="90" stroke="black"/>''',
+        expected='issues'):
+        passed += 1
+    else:
+        failed += 1
+
+    # Should trigger: path crosses box via edge nodes (enters left edge, exits right edge)
+    # This tests that even with nodes exactly on the edges, crossing through is detected
+    if test_case("path crosses box via edge nodes",
+        '''<rect x="50" y="50" width="50" height="50"/>
+           <path d="M 25 75 L 50 75 L 100 75 L 125 75" stroke="black" fill="none"/>''',
         expected='issues'):
         passed += 1
     else:
