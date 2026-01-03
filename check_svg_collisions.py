@@ -324,10 +324,30 @@ def parse_path_to_lines(d: str) -> list:
     return lines
 
 
-def extract_elements(svg_path: str) -> tuple:
+def find_element_line_numbers(svg_path: str) -> dict:
+    """Pre-scan SVG to map element tags to line numbers."""
+    line_map = {}  # (tag, occurrence_index) -> line_number
+    tag_counts = {}
+
+    with open(svg_path, 'r') as f:
+        for line_num, line in enumerate(f, 1):
+            # Find element tags in this line
+            for match in re.finditer(r'<(\w+)(?:\s|>|/)', line):
+                tag = match.group(1)
+                tag_counts[tag] = tag_counts.get(tag, 0) + 1
+                line_map[(tag, tag_counts[tag])] = line_num
+
+    return line_map
+
+
+def extract_elements(svg_path: str, warn_missing_ids: bool = True) -> tuple:
     """Extract all elements from SVG file."""
     tree = ET.parse(svg_path)
     root = tree.getroot()
+
+    # Pre-scan for line numbers
+    line_map = find_element_line_numbers(svg_path)
+    tag_counts = {}  # Track which occurrence of each tag we're on
 
     # Handle SVG namespace
     ns = {'svg': 'http://www.w3.org/2000/svg'}
@@ -339,18 +359,41 @@ def extract_elements(svg_path: str) -> tuple:
     rects = []
     lines = []
     polygons = []
+    missing_id_warnings = []
 
     elem_counter = 0
 
-    def get_name(elem):
+    def get_name(elem, tag, skip_warning=False):
         nonlocal elem_counter
         elem_counter += 1
-        return elem.get('id') or f"elem_{elem_counter}"
+
+        # Track tag occurrence for line number lookup
+        tag_counts[tag] = tag_counts.get(tag, 0) + 1
+        line_num = line_map.get((tag, tag_counts[tag]), '?')
+
+        if elem.get('id'):
+            return elem.get('id')
+        else:
+            temp_name = f"elem_{elem_counter}"
+            if warn_missing_ids and not skip_warning and tag in ('rect', 'line', 'path', 'polygon', 'polyline', 'text'):
+                missing_id_warnings.append(
+                    f"  <{tag}> at line {line_num} has no id, temporarily named '{temp_name}'"
+                )
+            return temp_name
+
+    # Build set of elements inside <defs> (these don't need IDs)
+    defs_elements = set()
+    for defs in root.iter():
+        defs_tag = defs.tag.split('}')[-1] if '}' in defs.tag else defs.tag
+        if defs_tag == 'defs':
+            for child in defs.iter():
+                defs_elements.add(child)
 
     # Find all elements (handle namespace)
     for elem in root.iter():
         tag = elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
-        name = get_name(elem)
+        in_defs = elem in defs_elements
+        name = get_name(elem, tag, skip_warning=in_defs)
 
         if tag == 'text':
             x = float(elem.get('x', 0))
@@ -412,7 +455,7 @@ def extract_elements(svg_path: str) -> tuple:
                     line = Line(x1, y1, x2, y2, segment_name)
                     lines.append(line)
 
-    return texts, rects, lines, polygons
+    return texts, rects, lines, polygons, missing_id_warnings
 
 
 def check_collisions(texts, rects, lines, polygons) -> tuple:
@@ -470,7 +513,7 @@ def check_collisions(texts, rects, lines, polygons) -> tuple:
 
 def check_file(svg_path: str) -> dict:
     """Check a single SVG file for collisions."""
-    texts, rects, lines, polygons = extract_elements(svg_path)
+    texts, rects, lines, polygons, missing_ids = extract_elements(svg_path)
     issues, warnings = check_collisions(texts, rects, lines, polygons)
 
     return {
@@ -480,7 +523,8 @@ def check_file(svg_path: str) -> dict:
         'lines': len(lines),
         'polygons': len(polygons),
         'issues': issues,
-        'warnings': warnings
+        'warnings': warnings,
+        'missing_ids': missing_ids
     }
 
 
@@ -519,14 +563,19 @@ def main():
     total_issues = 0
     total_warnings = 0
 
+    total_missing_ids = 0
+
     for filepath in files:
         result = check_file(filepath)
         issues = result['issues']
         warnings = result['warnings']
+        missing_ids = result['missing_ids']
         issue_count = len(issues)
         warning_count = len(warnings)
+        missing_id_count = len(missing_ids)
         total_issues += issue_count
         total_warnings += warning_count
+        total_missing_ids += missing_id_count
 
         if issue_count > 0:
             status = f"ISSUES ({issue_count})"
@@ -534,6 +583,8 @@ def main():
             status = f"WARNINGS ({warning_count})"
         else:
             status = "OK"
+        if missing_id_count > 0:
+            status += f" [MISSING IDs: {missing_id_count}]"
         counts = f"{result['texts']}t/{result['rects']}r/{result['lines']}l" if verbose else ""
         print(f"\n{result['file']} {counts}: {status}")
 
@@ -541,14 +592,21 @@ def main():
             print(f"  - {issue_type.upper()}: {elem1} / {elem2}")
         for warn_type, elem1, elem2 in warnings:
             print(f"  - WARNING {warn_type}: {elem1} / {elem2}")
+        for msg in missing_ids:
+            print(msg)
 
     print("\n" + "=" * 60)
-    if total_issues == 0 and total_warnings == 0:
+    if total_issues == 0 and total_warnings == 0 and total_missing_ids == 0:
         print("Result: No issues detected")
-    elif total_issues == 0:
-        print(f"Result: {total_warnings} warning(s)")
     else:
-        print(f"Result: {total_issues} issue(s), {total_warnings} warning(s)")
+        parts = []
+        if total_issues > 0:
+            parts.append(f"{total_issues} issue(s)")
+        if total_warnings > 0:
+            parts.append(f"{total_warnings} warning(s)")
+        if total_missing_ids > 0:
+            parts.append(f"{total_missing_ids} missing ID(s)")
+        print(f"Result: {', '.join(parts)}")
 
     return 1 if total_issues > 0 else 0
 

@@ -36,6 +36,16 @@ export GEMINI_API_KEY="your-api-key"    # get at https://aistudio.google.com/api
 5. **Line ↔ Box**: Lines must not pass through boxes (connecting to box edge is OK)
    - Corner touches generate warnings (not errors)
 
+## Element IDs
+
+For better error messages, all SVG elements (rect, line, path, polygon, text) should have `id` attributes. The checker warns about missing IDs with line numbers:
+
+```
+<rect> at line 42 has no id, temporarily named 'elem_12'
+```
+
+Elements inside `<defs>` (markers, gradients, etc.) are excluded from this check.
+
 ## Testing
 
 ```bash
