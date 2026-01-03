@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """SVG parsing and element extraction."""
 
+import math
 import re
 import xml.etree.ElementTree as ET
 
@@ -152,6 +153,72 @@ def parse_path_to_lines(d: str) -> list:
                 pass
 
     return lines
+
+
+def compute_marker_bbox(line, marker):
+    """Compute axis-aligned bounding box for a marker at line end, accounting for rotation.
+
+    Note: Default markerUnits is 'strokeWidth', meaning marker dimensions are
+    scaled by the line's stroke-width.
+    """
+    dx = line.x2 - line.x1
+    dy = line.y2 - line.y1
+    length = math.sqrt(dx * dx + dy * dy)
+
+    # Scale marker by stroke width (markerUnits="strokeWidth" is default)
+    scale = line.stroke_width
+    width = marker.width * scale
+    height = marker.height * scale
+    ref_x = marker.ref_x * scale
+    ref_y = marker.ref_y * scale
+
+    if length < 0.001:
+        # Degenerate line - just center the marker
+        half_w = width / 2
+        half_h = height / 2
+        return BBox(
+            line.x2 - half_w, line.y2 - half_h,
+            line.x2 + half_w, line.y2 + half_h,
+            f"{line.name}:marker", 'marker'
+        )
+
+    # Unit direction vector (line points this way)
+    ux, uy = dx / length, dy / length
+    # Perpendicular vector (90° counter-clockwise)
+    px, py = -uy, ux
+
+    # Marker corners in local coords (before rotation):
+    # Origin at (0,0), extends to (width, height) after scaling
+    # ref_x, ref_y is the attachment point placed at line endpoint
+    corners_local = [
+        (0, 0),
+        (width, 0),
+        (width, height),
+        (0, height),
+    ]
+
+    # Transform each corner to global coords
+    # Local x-axis maps to line direction (ux, uy)
+    # Local y-axis maps to perpendicular (px, py)
+    # Offset so ref_x, ref_y lands at (line.x2, line.y2)
+    global_corners = []
+    for lx, ly in corners_local:
+        # Offset from ref point in local coords
+        off_x = lx - ref_x
+        off_y = ly - ref_y
+        # Transform to global
+        gx = line.x2 + off_x * ux + off_y * px
+        gy = line.y2 + off_x * uy + off_y * py
+        global_corners.append((gx, gy))
+
+    # Compute axis-aligned bounding box
+    xs = [c[0] for c in global_corners]
+    ys = [c[1] for c in global_corners]
+
+    return BBox(
+        min(xs), min(ys), max(xs), max(ys),
+        f"{line.name}:marker", 'marker'
+    )
 
 
 def find_element_line_numbers(svg_path: str) -> dict:
@@ -307,15 +374,7 @@ def extract_elements(svg_path: str, warn_missing_ids: bool = True) -> tuple:
     for line in lines:
         if line.marker_end_id and line.marker_end_id in markers:
             marker = markers[line.marker_end_id]
-            x2, y2 = line.x2, line.y2
-            half_w = marker.width / 2
-            half_h = marker.height / 2
-            bbox = BBox(
-                x2 - half_w, y2 - half_h,
-                x2 + half_w, y2 + half_h,
-                f"{line.name}:marker",
-                'marker'
-            )
+            bbox = compute_marker_bbox(line, marker)
             rendered_markers.append((line.name, bbox))
 
     return texts, rects, lines, polygons, rendered_markers, markers, missing_id_warnings

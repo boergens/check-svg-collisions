@@ -308,7 +308,8 @@ def main():
     print("\n=== Marker Collisions ===")
 
     # Should trigger: line passes through rendered arrowhead marker
-    # Line 1 ends at (100, 50) with arrowhead, Line 2 crosses through that arrowhead
+    # Arrow ends at (100, 50), arrowhead extends back to x≈91 (refX=9 of 10 width)
+    # Line 2 at x=95 crosses through the middle of the arrowhead
     if test_case("line through arrowhead marker",
         '''<defs>
              <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
@@ -316,7 +317,25 @@ def main():
              </marker>
            </defs>
            <line id="arrow1" x1="0" y1="50" x2="100" y2="50" stroke="black" marker-end="url(#arrowhead)"/>
-           <line id="line2" x1="100" y1="0" x2="100" y2="100" stroke="black"/>''',
+           <line id="line2" x1="95" y1="0" x2="95" y2="100" stroke="black"/>''',
+        expected='issues'):
+        passed += 1
+    else:
+        failed += 1
+
+    # Should trigger: line through VERTICAL arrow's marker (tests rotation + stroke-width scaling)
+    # Arrow points down, ends at (100, 100) with stroke-width=2
+    # Marker (10x7) scales to 20x14, rotates so it extends from y≈82 to y≈102
+    # Horizontal line at y=90 should cut through it
+    # OLD BUG: without rotation/scaling, bbox would be y≈96.5-103.5, missing y=90
+    if test_case("line through vertical arrow marker",
+        '''<defs>
+             <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+               <polygon points="0 0, 10 3.5, 0 7" fill="#333"/>
+             </marker>
+           </defs>
+           <line id="arrow1" x1="100" y1="0" x2="100" y2="100" stroke="black" stroke-width="2" marker-end="url(#arrowhead)"/>
+           <line id="line2" x1="0" y1="90" x2="200" y2="90" stroke="black"/>''',
         expected='issues'):
         passed += 1
     else:
