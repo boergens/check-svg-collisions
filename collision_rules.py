@@ -1,8 +1,44 @@
 #!/usr/bin/env python3
 """Collision detection rules for SVG elements."""
 
+from measure_text import measure_en_dash_width
 
 MIN_MARKER_SEGMENT_RATIO = 2.0  # segment must be at least 2x marker width
+
+
+def nearest_gap(text, box) -> tuple:
+    """
+    Calculate the nearest gap between text and box, only if they're adjacent.
+    Returns (gap, True) if they're adjacent (overlap in one axis, gap in other).
+    Returns (None, False) if they're not adjacent (gap in both axes).
+    """
+    # Check overlap in each axis
+    x_overlap = text.x_max > box.x_min and box.x_max > text.x_min
+    y_overlap = text.y_max > box.y_min and box.y_max > text.y_min
+
+    if x_overlap and y_overlap:
+        return (0, True)  # actually overlapping
+
+    if x_overlap:
+        # They overlap in x, check y gap
+        gap_above = box.y_min - text.y_max  # text is above box
+        gap_below = text.y_min - box.y_max  # text is below box
+        if gap_above > 0:
+            return (gap_above, True)
+        if gap_below > 0:
+            return (gap_below, True)
+
+    if y_overlap:
+        # They overlap in y, check x gap
+        gap_left = box.x_min - text.x_max  # text is left of box
+        gap_right = text.x_min - box.x_max  # text is right of box
+        if gap_left > 0:
+            return (gap_left, True)
+        if gap_right > 0:
+            return (gap_right, True)
+
+    # No overlap in either axis - not adjacent
+    return (None, False)
 
 
 def check_collisions(texts, rects, lines, polygons, rendered_markers=None, markers=None) -> tuple:
@@ -46,6 +82,18 @@ def check_collisions(texts, rects, lines, polygons, rendered_markers=None, marke
                 if text.contains(box):
                     continue
                 issues.append(("text crosses box", text.name, box.name))
+
+    # Rule 3b: Text - Box: text should not be too close to box edge
+    for text in texts:
+        if not text.font_family or not text.font_size:
+            continue
+        min_gap_required = measure_en_dash_width(text.font_family, text.font_size)
+        for box in boxes:
+            if box.contains(text) or text.contains(box):
+                continue
+            gap, is_adjacent = nearest_gap(text, box)
+            if is_adjacent and gap is not None and 0 < gap < min_gap_required:
+                issues.append(("text too close to box", text.name, f"{gap:.1f}px < {min_gap_required:.1f}px"))
 
     # Rule 4: Box - Box: no overlap unless containment
     for i, b1 in enumerate(boxes):

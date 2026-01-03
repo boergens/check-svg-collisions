@@ -126,6 +126,26 @@ def main():
     else:
         failed += 1
 
+    # Should trigger: text too close to box edge (less than en-dash width)
+    # Text "Hello" ends around x=38, box starts at x=40, gap ~2px < 6.7px en-dash
+    if test_case("text too close to box",
+        '''<rect x="40" y="10" width="100" height="100"/>
+           <text x="10" y="60" font-size="12">Hello</text>''',
+        expected='issues'):
+        passed += 1
+    else:
+        failed += 1
+
+    # Should NOT trigger: text far enough from box edge
+    # Text "Hello" ends around x=38, box starts at x=50, gap ~12px > 6.7px en-dash
+    if test_case("text adequate distance from box",
+        '''<rect x="50" y="10" width="100" height="100"/>
+           <text x="10" y="60" font-size="12">Hello</text>''',
+        expected='clean'):
+        passed += 1
+    else:
+        failed += 1
+
     print("\n=== Box ↔ Box ===")
 
     # Should trigger: overlapping boxes (no containment)

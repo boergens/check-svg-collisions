@@ -31,6 +31,12 @@ def measure_text(text: str, font_family: str, font_size: float) -> tuple:
     return width, height, ascent, descent
 
 
+def measure_en_dash_width(font_family: str, font_size: float) -> float:
+    """Measure the width of an en-dash for the given font."""
+    width, _, _, _ = measure_text('–', font_family, font_size)
+    return width
+
+
 def measure_text_bbox(text: str, x: float, y: float, font_family: str, font_size: float, anchor: str) -> tuple:
     """
     Get bounding box for text at position (x, y).

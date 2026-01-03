@@ -12,6 +12,8 @@ class BBox:
     y_max: float
     name: str
     elem_type: str  # 'text', 'rect', 'line', 'polygon'
+    font_family: str = None
+    font_size: float = None
 
     def overlaps(self, other: 'BBox', eps: float = 0.5) -> bool:
         if self.x_max <= other.x_min + eps or other.x_max <= self.x_min + eps:

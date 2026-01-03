@@ -253,7 +253,8 @@ def extract_elements(svg_path: str, warn_missing_ids: bool = True) -> tuple:
                 text_content, x, y, font_family, font_size, anchor
             )
 
-            bbox = BBox(x_min, y_min, x_max, y_max, text_content[:20] or name, 'text')
+            bbox = BBox(x_min, y_min, x_max, y_max, text_content[:20] or name, 'text',
+                        font_family=font_family, font_size=font_size)
             texts.append(bbox)
 
         elif tag == 'rect':
